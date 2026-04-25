@@ -1,7 +1,14 @@
-flask
-pandas
-numpy
-scikit-learn
-xgboost
-joblib
-gunicorn
+# CloudSentinel - Cloud Deployment Package
+# This file contains everything needed to deploy on Render.com (FREE)
+
+# â”€â”€ requirements.txt â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+# Save this as requirements.txt in your project folder
+
+flask==2.2.5
+pandas==1.5.3
+numpy==1.23.5
+scikit-learn==1.2.2
+xgboost==1.7.6
+tensorflow-cpu==2.10.0
+joblib==1.2.0
+gunicorn==21.2.0

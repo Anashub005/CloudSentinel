@@ -148,6 +148,47 @@ def init_db():
         ip TEXT PRIMARY KEY, reason TEXT, risk TEXT,
         blocked_at TEXT, unblock_at TEXT
     )""")
+    conn.commit()
+
+    # ── Pre-populate demo data so dashboard never shows 0 on Render ──
+    c.execute("SELECT COUNT(*) FROM alerts")
+    if c.fetchone()[0] == 0:
+        demo_attacks = [
+            ("DDoS",          "CRITICAL", 6.8, "45.33.32.156",  "SYN Flag Count +8.4s  |  Flow Packets/s +7.1s  |  Flow Bytes/s +6.2s"),
+            ("BruteForce",    "HIGH",     4.2, "103.21.244.22", "RST Flag Count +5.9s  |  Flow Duration +4.8s  |  Total Fwd Packets +3.2s"),
+            ("Botnet",        "HIGH",     3.9, "185.220.101.5", "Fwd PSH Flags +4.7s  |  Bwd PSH Flags +4.1s  |  Flow IAT Std +3.5s"),
+            ("DDoS",          "CRITICAL", 7.2, "45.142.212.18", "SYN Flag Count +9.1s  |  Flow Packets/s +8.3s  |  Total Fwd Packets +7.5s"),
+            ("PortScan",      "MEDIUM",   2.8, "77.88.21.33",  "Flow Packets/s +3.9s  |  SYN Flag Count +3.1s  |  Flow Duration +2.4s"),
+            ("BruteForce",    "HIGH",     4.5, "91.108.4.244", "RST Flag Count +6.2s  |  Total Backward Packets +4.9s  |  Flow Duration +3.8s"),
+            ("DoS",           "CRITICAL", 5.9, "185.56.80.11", "Flow Bytes/s +7.8s  |  Total Length of Fwd Packets +7.1s  |  Fwd Packet Length Max +6.3s"),
+            ("Reconnaissance","MEDIUM",   2.6, "77.32.44.91",  "Flow Packets/s +4.2s  |  Flow Duration +2.9s  |  SYN Flag Count +2.1s"),
+            ("Botnet",        "HIGH",     3.7, "103.99.0.122", "Fwd PSH Flags +5.1s  |  Flow IAT Mean +4.3s  |  Bwd IAT Total +3.6s"),
+            ("DDoS",          "CRITICAL", 8.1, "45.227.253.6", "SYN Flag Count +10.2s |  Flow Packets/s +9.4s  |  Flow Bytes/s +8.7s"),
+            ("BruteForce",    "MEDIUM",   2.9, "91.200.12.66", "RST Flag Count +4.1s  |  Flow Duration +3.2s  |  Bwd Packet Length Max +2.5s"),
+            ("PortScan",      "LOW",      1.7, "185.100.87.3", "Flow Packets/s +2.8s  |  SYN Flag Count +2.1s  |  Flow Duration +1.5s"),
+            ("Botnet",        "HIGH",     4.1, "77.222.41.12", "Bwd PSH Flags +5.5s  |  Fwd PSH Flags +4.8s  |  Flow IAT Std +4.0s"),
+            ("DoS",           "HIGH",     3.6, "103.55.210.9", "Flow Bytes/s +5.3s  |  Total Length of Fwd Packets +4.7s  |  Fwd Packet Length Mean +3.9s"),
+            ("DDoS",          "CRITICAL", 6.4, "45.9.148.90",  "SYN Flag Count +7.9s  |  Total Fwd Packets +7.2s  |  Flow Packets/s +6.6s"),
+            ("Reconnaissance","LOW",      1.9, "91.134.22.5",  "Flow Packets/s +3.1s  |  SYN Flag Count +2.4s  |  Flow Duration +1.7s"),
+            ("BruteForce",    "HIGH",     4.0, "185.70.44.22", "RST Flag Count +5.7s  |  Flow Duration +4.4s  |  Total Backward Packets +3.7s"),
+            ("Botnet",        "MEDIUM",   2.7, "77.111.240.4", "Fwd PSH Flags +3.8s  |  Bwd PSH Flags +3.2s  |  Flow IAT Mean +2.6s"),
+            ("DoS",           "CRITICAL", 5.5, "103.88.33.18", "Flow Bytes/s +6.9s  |  Total Length of Fwd Packets +6.3s  |  Bwd Packet Length Max +5.7s"),
+            ("PortScan",      "INFO",     0.9, "45.12.54.33",  "Flow Packets/s +1.8s  |  SYN Flag Count +1.2s  |  Flow Duration +0.9s"),
+        ]
+        dst_pool = ["10.0.0.5","10.0.0.12","10.0.1.3","10.0.1.8","10.0.2.1"]
+        for i, (atype, risk, score, src, expl) in enumerate(demo_attacks):
+            mins_ago = (len(demo_attacks) - i) * 3
+            ts = (datetime.now() - timedelta(minutes=mins_ago)).strftime("%Y-%m-%d %H:%M:%S")
+            dst = random.choice(dst_pool)
+            top_feat = expl.split("+")[0].strip()
+            c.execute("INSERT INTO alerts (timestamp,source_ip,dest_ip,attack_type,risk,score,top_feature,explanation) VALUES(?,?,?,?,?,?,?,?)",
+                (ts, src, dst, atype, risk, score, top_feat, expl))
+            if risk in ("CRITICAL","HIGH"):
+                ub = (datetime.now() + timedelta(hours=1)).strftime("%Y-%m-%d %H:%M:%S")
+                c.execute("INSERT OR REPLACE INTO blocked_ips (ip,reason,risk,blocked_at,unblock_at) VALUES(?,?,?,?,?)",
+                    (src, atype, risk, ts, ub))
+        FLOW_COUNT[0] = random.randint(840, 960)
+
     conn.commit(); conn.close()
 
 init_db()

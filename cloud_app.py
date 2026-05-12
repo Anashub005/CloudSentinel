@@ -20,6 +20,11 @@ CloudSentinel NEW DESIGN:
   - Completely different layout structure
 
 Guide cannot connect the two projects visually!
+
+FIXES APPLIED:
+  FIX 1 → FLOW_COUNT bug: now set correctly even when DB already has data
+  FIX 2 → JS fetch: proper error handling, UI shows ERR instead of staying 0
+  FIX 3 → JS defensive null checks: no crash if API returns partial data
 """
 
 from flask import Flask, render_template_string, jsonify, request
@@ -150,30 +155,32 @@ def init_db():
     )""")
     conn.commit()
 
-    # ── Pre-populate demo data so dashboard never shows 0 on Render ──
     c.execute("SELECT COUNT(*) FROM alerts")
-    if c.fetchone()[0] == 0:
+    existing_count = c.fetchone()[0]
+
+    if existing_count == 0:
+        # ── FIX 1A: DB empty → populate demo data + set FLOW_COUNT ──
         demo_attacks = [
             ("DDoS",          "CRITICAL", 6.8, "45.33.32.156",  "SYN Flag Count +8.4s  |  Flow Packets/s +7.1s  |  Flow Bytes/s +6.2s"),
             ("BruteForce",    "HIGH",     4.2, "103.21.244.22", "RST Flag Count +5.9s  |  Flow Duration +4.8s  |  Total Fwd Packets +3.2s"),
             ("Botnet",        "HIGH",     3.9, "185.220.101.5", "Fwd PSH Flags +4.7s  |  Bwd PSH Flags +4.1s  |  Flow IAT Std +3.5s"),
             ("DDoS",          "CRITICAL", 7.2, "45.142.212.18", "SYN Flag Count +9.1s  |  Flow Packets/s +8.3s  |  Total Fwd Packets +7.5s"),
-            ("PortScan",      "MEDIUM",   2.8, "77.88.21.33",  "Flow Packets/s +3.9s  |  SYN Flag Count +3.1s  |  Flow Duration +2.4s"),
-            ("BruteForce",    "HIGH",     4.5, "91.108.4.244", "RST Flag Count +6.2s  |  Total Backward Packets +4.9s  |  Flow Duration +3.8s"),
-            ("DoS",           "CRITICAL", 5.9, "185.56.80.11", "Flow Bytes/s +7.8s  |  Total Length of Fwd Packets +7.1s  |  Fwd Packet Length Max +6.3s"),
-            ("Reconnaissance","MEDIUM",   2.6, "77.32.44.91",  "Flow Packets/s +4.2s  |  Flow Duration +2.9s  |  SYN Flag Count +2.1s"),
-            ("Botnet",        "HIGH",     3.7, "103.99.0.122", "Fwd PSH Flags +5.1s  |  Flow IAT Mean +4.3s  |  Bwd IAT Total +3.6s"),
-            ("DDoS",          "CRITICAL", 8.1, "45.227.253.6", "SYN Flag Count +10.2s |  Flow Packets/s +9.4s  |  Flow Bytes/s +8.7s"),
-            ("BruteForce",    "MEDIUM",   2.9, "91.200.12.66", "RST Flag Count +4.1s  |  Flow Duration +3.2s  |  Bwd Packet Length Max +2.5s"),
-            ("PortScan",      "LOW",      1.7, "185.100.87.3", "Flow Packets/s +2.8s  |  SYN Flag Count +2.1s  |  Flow Duration +1.5s"),
-            ("Botnet",        "HIGH",     4.1, "77.222.41.12", "Bwd PSH Flags +5.5s  |  Fwd PSH Flags +4.8s  |  Flow IAT Std +4.0s"),
-            ("DoS",           "HIGH",     3.6, "103.55.210.9", "Flow Bytes/s +5.3s  |  Total Length of Fwd Packets +4.7s  |  Fwd Packet Length Mean +3.9s"),
-            ("DDoS",          "CRITICAL", 6.4, "45.9.148.90",  "SYN Flag Count +7.9s  |  Total Fwd Packets +7.2s  |  Flow Packets/s +6.6s"),
-            ("Reconnaissance","LOW",      1.9, "91.134.22.5",  "Flow Packets/s +3.1s  |  SYN Flag Count +2.4s  |  Flow Duration +1.7s"),
-            ("BruteForce",    "HIGH",     4.0, "185.70.44.22", "RST Flag Count +5.7s  |  Flow Duration +4.4s  |  Total Backward Packets +3.7s"),
-            ("Botnet",        "MEDIUM",   2.7, "77.111.240.4", "Fwd PSH Flags +3.8s  |  Bwd PSH Flags +3.2s  |  Flow IAT Mean +2.6s"),
-            ("DoS",           "CRITICAL", 5.5, "103.88.33.18", "Flow Bytes/s +6.9s  |  Total Length of Fwd Packets +6.3s  |  Bwd Packet Length Max +5.7s"),
-            ("PortScan",      "INFO",     0.9, "45.12.54.33",  "Flow Packets/s +1.8s  |  SYN Flag Count +1.2s  |  Flow Duration +0.9s"),
+            ("PortScan",      "MEDIUM",   2.8, "77.88.21.33",   "Flow Packets/s +3.9s  |  SYN Flag Count +3.1s  |  Flow Duration +2.4s"),
+            ("BruteForce",    "HIGH",     4.5, "91.108.4.244",  "RST Flag Count +6.2s  |  Total Backward Packets +4.9s  |  Flow Duration +3.8s"),
+            ("DoS",           "CRITICAL", 5.9, "185.56.80.11",  "Flow Bytes/s +7.8s  |  Total Length of Fwd Packets +7.1s  |  Fwd Packet Length Max +6.3s"),
+            ("Reconnaissance","MEDIUM",   2.6, "77.32.44.91",   "Flow Packets/s +4.2s  |  Flow Duration +2.9s  |  SYN Flag Count +2.1s"),
+            ("Botnet",        "HIGH",     3.7, "103.99.0.122",  "Fwd PSH Flags +5.1s  |  Flow IAT Mean +4.3s  |  Bwd IAT Total +3.6s"),
+            ("DDoS",          "CRITICAL", 8.1, "45.227.253.6",  "SYN Flag Count +10.2s |  Flow Packets/s +9.4s  |  Flow Bytes/s +8.7s"),
+            ("BruteForce",    "MEDIUM",   2.9, "91.200.12.66",  "RST Flag Count +4.1s  |  Flow Duration +3.2s  |  Bwd Packet Length Max +2.5s"),
+            ("PortScan",      "LOW",      1.7, "185.100.87.3",  "Flow Packets/s +2.8s  |  SYN Flag Count +2.1s  |  Flow Duration +1.5s"),
+            ("Botnet",        "HIGH",     4.1, "77.222.41.12",  "Bwd PSH Flags +5.5s  |  Fwd PSH Flags +4.8s  |  Flow IAT Std +4.0s"),
+            ("DoS",           "HIGH",     3.6, "103.55.210.9",  "Flow Bytes/s +5.3s  |  Total Length of Fwd Packets +4.7s  |  Fwd Packet Length Mean +3.9s"),
+            ("DDoS",          "CRITICAL", 6.4, "45.9.148.90",   "SYN Flag Count +7.9s  |  Total Fwd Packets +7.2s  |  Flow Packets/s +6.6s"),
+            ("Reconnaissance","LOW",      1.9, "91.134.22.5",   "Flow Packets/s +3.1s  |  SYN Flag Count +2.4s  |  Flow Duration +1.7s"),
+            ("BruteForce",    "HIGH",     4.0, "185.70.44.22",  "RST Flag Count +5.7s  |  Flow Duration +4.4s  |  Total Backward Packets +3.7s"),
+            ("Botnet",        "MEDIUM",   2.7, "77.111.240.4",  "Fwd PSH Flags +3.8s  |  Bwd PSH Flags +3.2s  |  Flow IAT Mean +2.6s"),
+            ("DoS",           "CRITICAL", 5.5, "103.88.33.18",  "Flow Bytes/s +6.9s  |  Total Length of Fwd Packets +6.3s  |  Bwd Packet Length Max +5.7s"),
+            ("PortScan",      "INFO",     0.9, "45.12.54.33",   "Flow Packets/s +1.8s  |  SYN Flag Count +1.2s  |  Flow Duration +0.9s"),
         ]
         dst_pool = ["10.0.0.5","10.0.0.12","10.0.1.3","10.0.1.8","10.0.2.1"]
         for i, (atype, risk, score, src, expl) in enumerate(demo_attacks):
@@ -188,8 +195,16 @@ def init_db():
                 c.execute("INSERT OR REPLACE INTO blocked_ips (ip,reason,risk,blocked_at,unblock_at) VALUES(?,?,?,?,?)",
                     (src, atype, risk, ts, ub))
         FLOW_COUNT[0] = random.randint(840, 960)
+        print(f"[CloudSentinel] DB populated with {len(demo_attacks)} demo alerts. FLOW_COUNT={FLOW_COUNT[0]}")
 
-    conn.commit(); conn.close()
+    else:
+        # ── FIX 1B: DB already has data → FLOW_COUNT set from existing alerts ──
+        # This was the main bug — FLOW_COUNT was staying 0 when DB had data!
+        FLOW_COUNT[0] = existing_count * 3 + random.randint(300, 600)
+        print(f"[CloudSentinel] DB has {existing_count} alerts. FLOW_COUNT set to {FLOW_COUNT[0]}")
+
+    conn.commit()
+    conn.close()
 
 init_db()
 
@@ -222,7 +237,6 @@ def sim():
 
 threading.Thread(target=sim, daemon=True).start()
 
-# ── FIX: DASHBOARD string is now properly terminated ──
 DASHBOARD = """<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -367,9 +381,7 @@ body {
   text-transform: uppercase; letter-spacing: .8px;
   color: var(--slate);
 }
-.card-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-}
+.card-dot { width: 8px; height: 8px; border-radius: 50%; }
 .ch { height: 185px; }
 .badge {
   display: inline-block;
@@ -426,6 +438,19 @@ body {
 .gauge-val { font-size:28px; font-weight:800; color:var(--teal); font-family:'DM Mono',monospace; }
 .gauge-sub { font-size:10px; color:var(--muted); }
 .pb { padding-bottom: 24px; }
+/* FIX 2: API error banner */
+.api-error-banner {
+  display: none;
+  background: #fce7e7;
+  color: #c0392b;
+  border: 1px solid #f5b7b1;
+  border-radius: 8px;
+  padding: 8px 16px;
+  font-size: 11px;
+  font-family: 'DM Mono', monospace;
+  margin: 10px 28px 0;
+  text-align: center;
+}
 </style>
 </head>
 <body>
@@ -448,33 +473,38 @@ body {
   </div>
 </div>
 
+<!-- FIX 2: API error banner (hidden by default) -->
+<div class="api-error-banner" id="api-error-banner">
+  ⚠ API connection error — retrying...
+</div>
+
 <!-- KPI Cards -->
 <div class="kpi-row">
   <div class="kpi kpi-flows">
     <div class="kpi-icon">&#128225;</div>
     <div>
-      <div class="kpi-val c-teal" id="kpi-flows">0</div>
+      <div class="kpi-val c-teal" id="kpi-flows">—</div>
       <div class="kpi-label">Flows Analyzed</div>
     </div>
   </div>
   <div class="kpi kpi-threats">
     <div class="kpi-icon">&#9888;&#65039;</div>
     <div>
-      <div class="kpi-val c-coral" id="kpi-threats">0</div>
+      <div class="kpi-val c-coral" id="kpi-threats">—</div>
       <div class="kpi-label">Threats Detected</div>
     </div>
   </div>
   <div class="kpi kpi-crit">
     <div class="kpi-icon">&#128680;</div>
     <div>
-      <div class="kpi-val c-coral" id="kpi-crit">0</div>
+      <div class="kpi-val c-coral" id="kpi-crit">—</div>
       <div class="kpi-label">Critical Alerts</div>
     </div>
   </div>
   <div class="kpi kpi-block">
     <div class="kpi-icon">&#128737;&#65039;</div>
     <div>
-      <div class="kpi-val c-amber" id="kpi-block">0</div>
+      <div class="kpi-val c-amber" id="kpi-block">—</div>
       <div class="kpi-label">IPs Blocked</div>
     </div>
   </div>
@@ -540,37 +570,27 @@ body {
     </div>
     <div class="thr-item">
       <span class="thr-label" style="color:#c0392b;">CRITICAL</span>
-      <div class="thr-bar-wrap">
-        <div class="thr-bar" id="thr-critical" style="background:#f43f5e;width:0%"></div>
-      </div>
+      <div class="thr-bar-wrap"><div class="thr-bar" id="thr-critical" style="background:#f43f5e;width:0%"></div></div>
       <span class="thr-val" id="thr-critical-val">0</span>
     </div>
     <div class="thr-item">
       <span class="thr-label" style="color:#d35400;">HIGH</span>
-      <div class="thr-bar-wrap">
-        <div class="thr-bar" id="thr-high" style="background:#f59e0b;width:0%"></div>
-      </div>
+      <div class="thr-bar-wrap"><div class="thr-bar" id="thr-high" style="background:#f59e0b;width:0%"></div></div>
       <span class="thr-val" id="thr-high-val">0</span>
     </div>
     <div class="thr-item">
       <span class="thr-label" style="color:#b7950b;">MEDIUM</span>
-      <div class="thr-bar-wrap">
-        <div class="thr-bar" id="thr-medium" style="background:#eab308;width:0%"></div>
-      </div>
+      <div class="thr-bar-wrap"><div class="thr-bar" id="thr-medium" style="background:#eab308;width:0%"></div></div>
       <span class="thr-val" id="thr-medium-val">0</span>
     </div>
     <div class="thr-item">
       <span class="thr-label" style="color:#1e8449;">LOW</span>
-      <div class="thr-bar-wrap">
-        <div class="thr-bar" id="thr-low" style="background:#10b981;width:0%"></div>
-      </div>
+      <div class="thr-bar-wrap"><div class="thr-bar" id="thr-low" style="background:#10b981;width:0%"></div></div>
       <span class="thr-val" id="thr-low-val">0</span>
     </div>
     <div class="thr-item">
       <span class="thr-label" style="color:var(--slate);">INFO</span>
-      <div class="thr-bar-wrap">
-        <div class="thr-bar" id="thr-info" style="background:var(--border);width:0%"></div>
-      </div>
+      <div class="thr-bar-wrap"><div class="thr-bar" id="thr-info" style="background:var(--border);width:0%"></div></div>
       <span class="thr-val" id="thr-info-val">0</span>
     </div>
     <div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);">
@@ -588,10 +608,7 @@ body {
       <table class="blk-table">
         <thead>
           <tr>
-            <th>Source IP</th>
-            <th>Reason</th>
-            <th>Risk</th>
-            <th>Blocked At</th>
+            <th>Source IP</th><th>Reason</th><th>Risk</th><th>Blocked At</th>
           </tr>
         </thead>
         <tbody id="blocked-body">
@@ -622,8 +639,7 @@ body {
 <script>
 // ── Clock ──
 function updateClock() {
-  const now = new Date();
-  document.getElementById('clock').textContent = now.toLocaleTimeString();
+  document.getElementById('clock').textContent = new Date().toLocaleTimeString();
 }
 setInterval(updateClock, 1000);
 updateClock();
@@ -683,10 +699,7 @@ const scoreChart  = new Chart(scoreCtx, {
       data: scoreData,
       borderColor: '#f59e0b',
       backgroundColor: 'rgba(245,158,11,.08)',
-      fill: true,
-      tension: 0.4,
-      pointRadius: 2,
-      borderWidth: 2
+      fill: true, tension: 0.4, pointRadius: 2, borderWidth: 2
     }]
   },
   options: {
@@ -699,34 +712,45 @@ const scoreChart  = new Chart(scoreCtx, {
   }
 });
 
-// ── Data fetch & update ──
+// ── FIX 2 + FIX 3: Data fetch with proper error handling & null checks ──
 function refresh() {
   fetch('/api/data')
-    .then(r => r.json())
+    .then(r => {
+      if (!r.ok) throw new Error('HTTP ' + r.status);
+      return r.json();
+    })
     .then(d => {
+      // FIX 2: Hide error banner on success
+      document.getElementById('api-error-banner').style.display = 'none';
+
+      // FIX 3: Defensive null checks — no crash if fields missing
+      const flows    = d.total_flows   ?? 0;
+      const threats  = d.total_threats ?? 0;
+      const rc       = d.risk_counts   ?? {};
+      const tc       = d.type_counts   ?? {};
+      const blocked  = d.blocked_ips   ?? [];
+      const alerts   = d.recent_alerts ?? [];
+
       // KPIs
-      document.getElementById('kpi-flows').textContent   = d.total_flows.toLocaleString();
-      document.getElementById('kpi-threats').textContent = d.total_threats;
-      document.getElementById('kpi-crit').textContent    = d.risk_counts.CRITICAL || 0;
-      document.getElementById('kpi-block').textContent   = d.blocked_count;
+      document.getElementById('kpi-flows').textContent   = flows.toLocaleString();
+      document.getElementById('kpi-threats').textContent = threats;
+      document.getElementById('kpi-crit').textContent    = rc.CRITICAL ?? 0;
+      document.getElementById('kpi-block').textContent   = d.blocked_count ?? 0;
 
       // Risk chart
       riskChart.data.datasets[0].data = [
-        d.risk_counts.CRITICAL||0, d.risk_counts.HIGH||0,
-        d.risk_counts.MEDIUM||0,   d.risk_counts.LOW||0,
-        d.risk_counts.INFO||0
+        rc.CRITICAL||0, rc.HIGH||0, rc.MEDIUM||0, rc.LOW||0, rc.INFO||0
       ];
       riskChart.update('none');
 
       // Type chart
-      const tc = d.type_counts;
       typeChart.data.datasets[0].data = [
         tc.DDoS||0, tc.BruteForce||0, tc.Botnet||0, tc.PortScan||0, tc.DoS||0
       ];
       typeChart.update('none');
 
       // Score timeline
-      if (d.latest_score !== null) {
+      if (d.latest_score != null) {
         const t = new Date().toLocaleTimeString([], {hour:'2-digit',minute:'2-digit',second:'2-digit'});
         if (scoreLabels.length > 25) { scoreLabels.shift(); scoreData.shift(); }
         scoreLabels.push(t);
@@ -735,11 +759,10 @@ function refresh() {
       }
 
       // Threshold bars
-      const total = d.total_threats || 1;
-      const risks = ['critical','high','medium','low','info'];
-      const rkeys = ['CRITICAL','HIGH','MEDIUM','LOW','INFO'];
-      risks.forEach((r, i) => {
-        const cnt = d.risk_counts[rkeys[i]] || 0;
+      const total = threats || 1;
+      ['critical','high','medium','low','info'].forEach((r, i) => {
+        const key = r.toUpperCase();
+        const cnt = rc[key] || 0;
         const pct = Math.min((cnt / total) * 100, 100);
         document.getElementById('thr-' + r).style.width = pct + '%';
         document.getElementById('thr-' + r + '-val').textContent = cnt;
@@ -747,21 +770,20 @@ function refresh() {
 
       // Blocked IPs table
       const tbody = document.getElementById('blocked-body');
-      if (d.blocked_ips && d.blocked_ips.length > 0) {
-        tbody.innerHTML = d.blocked_ips.map(ip =>
+      if (blocked.length > 0) {
+        tbody.innerHTML = blocked.map(ip =>
           '<tr>' +
           '<td class="mono">' + ip.ip + '</td>' +
           '<td>' + ip.reason + '</td>' +
           '<td><span class="badge ' + ip.risk + '">' + ip.risk + '</span></td>' +
-          '<td class="mono" style="color:var(--muted);font-size:10px;">' + ip.blocked_at.slice(11,19) + '</td>' +
+          '<td class="mono" style="color:var(--muted);font-size:10px;">' + (ip.blocked_at||'').slice(11,19) + '</td>' +
           '</tr>'
         ).join('');
       }
 
       // Threat timeline
-      if (d.recent_alerts && d.recent_alerts.length > 0) {
-        const tl = document.getElementById('timeline');
-        tl.innerHTML = d.recent_alerts.map(a =>
+      if (alerts.length > 0) {
+        document.getElementById('timeline').innerHTML = alerts.map(a =>
           '<div class="tl-item">' +
           '<div class="tl-dot tl-' + a.risk + '"></div>' +
           '<div class="tl-body">' +
@@ -769,14 +791,18 @@ function refresh() {
           '<span class="tl-attack">' + a.attack_type + '</span>' +
           '<span class="badge ' + a.risk + '">' + a.risk + '</span>' +
           '<span class="tl-ip">' + a.source_ip + ' &rarr; ' + a.dest_ip + '</span>' +
-          '<span class="tl-time">' + a.timestamp.slice(11,19) + '</span>' +
+          '<span class="tl-time">' + (a.timestamp||'').slice(11,19) + '</span>' +
           '</div>' +
-          '<div class="tl-exp">' + a.explanation + '</div>' +
+          '<div class="tl-exp">' + (a.explanation||'') + '</div>' +
           '</div></div>'
         ).join('');
       }
     })
-    .catch(console.error);
+    .catch(err => {
+      // FIX 2: Show error banner instead of silently failing
+      console.error('[CloudSentinel] API Error:', err);
+      document.getElementById('api-error-banner').style.display = 'block';
+    });
 }
 
 refresh();
@@ -823,16 +849,17 @@ def api_data():
         conn.close()
 
         return jsonify({
-            "total_flows": FLOW_COUNT[0],
+            "total_flows":   FLOW_COUNT[0],
             "total_threats": total_threats,
-            "risk_counts": risk_counts,
-            "type_counts": type_counts,
-            "latest_score": latest_score,
+            "risk_counts":   risk_counts,
+            "type_counts":   type_counts,
+            "latest_score":  latest_score,
             "blocked_count": len(blocked_ips),
-            "blocked_ips": blocked_ips,
+            "blocked_ips":   blocked_ips,
             "recent_alerts": recent_alerts
         })
     except Exception as e:
+        print(f"[CloudSentinel] /api/data error: {e}")
         return jsonify({"error": str(e)}), 500
 
 @app.route('/inject', methods=['POST'])
